@@ -718,23 +718,36 @@ class GLM(BaseEstimator):
         # Iterative updates
         for t in range(0, self.max_iter):
             if self.solver == 'batch-gradient':
+                if t > 1:
+                    gradnorm_prev = gradnorm
                 grad = _grad_L2loss(self.distr,
                                     alpha, self.Tau,
                                     reg_lambda, X, y, self.eta,
                                     beta)
                 # Converged if the norm(gradient) < tol
-                if (t > 1) and (np.linalg.norm(grad) < tol):
+                gradnorm = np.linalg.norm(grad)
+                logger.info('Grad norm: {}'.format(gradnorm))
+                if t > 1:
+                    if ((self.reg_lambda == 0 and gradnorm < tol) or
+                        (self.reg_lambda > 0 and
+                         np.abs(gradnorm - gradnorm_prev) < tol)):
                         msg = ('\tConverged in {0:d} iterations'.format(t))
                         logger.info(msg)
                         break
                 beta = beta - self.learning_rate * grad
 
             elif self.solver == 'cdfast':
+                if t > 1:
+                    updatenorm_prev = updatenorm
                 beta_old = deepcopy(beta)
                 beta, z = \
                     self._cdfast(X, y, z, ActiveSet, beta, reg_lambda)
                 # Converged if the norm(update) < tol
-                if (t > 1) and (np.linalg.norm(beta - beta_old) < tol):
+                updatenorm = np.linalg.norm(beta - beta_old)
+                if t > 1:
+                    if ((self.reg_lambda == 0 and updatenorm < tol) or
+                        (self.reg_lambda > 0 and
+                         np.abs(updatenorm - updatenorm_prev) < tol)):
                         msg = ('\tConverged in {0:d} iterations'.format(t))
                         logger.info(msg)
                         break
@@ -1083,7 +1096,7 @@ class GLMCV(object):
             glm = GLM(distr=self.distr,
                       alpha=self.alpha,
                       Tau=self.Tau,
-                      reg_lambda=0.1,
+                      reg_lambda=rl,
                       solver=self.solver,
                       learning_rate=self.learning_rate,
                       max_iter=self.max_iter,
@@ -1093,7 +1106,6 @@ class GLMCV(object):
                       random_state=self.random_state,
                       verbose=self.verbose)
             logger.info('Lambda: %6.4f' % rl)
-            glm.reg_lambda = rl
 
             scores_fold = list()
             for fold in range(self.cv):
